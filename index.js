@@ -39,6 +39,10 @@ function generateKeyPair(outputPath) {
   console.log(`Public key: ${publicPath}`);
 }
 
+function normalizeContent(content) {
+  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
 function getAllFiles(dir, baseDir = dir) {
   let results = {};
   const list = fs.readdirSync(dir);
@@ -53,7 +57,7 @@ function getAllFiles(dir, baseDir = dir) {
       Object.assign(results, getAllFiles(filePath, baseDir));
     } else {
       const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
-      const content = fs.readFileSync(filePath, 'utf8');
+      const content = normalizeContent(fs.readFileSync(filePath, 'utf8'));
       results[relativePath] = content;
     }
   }
