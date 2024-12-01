@@ -1,0 +1,12 @@
+{
+  "name": "trem-plugin-signer",
+  "version": "1.0.0",
+  "description": "TREM Plugin Signing Tool",
+  "main": "index.js",
+  "bin": {
+    "trem-plugin-signer": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
