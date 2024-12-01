@@ -4,11 +4,18 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// 命令行參數處理
 const args = process.argv.slice(2);
 const command = args[0];
 
 function generateKeyPair(outputPath) {
+  try {
+    fs.mkdirSync(outputPath, { recursive: true });
+  } catch (err) {
+    if (err.code !== 'EEXIST') {
+      throw err;
+    }
+  }
+
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: 2048,
     publicKeyEncoding: {
@@ -21,12 +28,25 @@ function generateKeyPair(outputPath) {
     }
   });
 
-  fs.writeFileSync(path.join(outputPath, 'private.pem'), privateKey);
-  fs.writeFileSync(path.join(outputPath, 'public.pem'), publicKey);
-  console.log('Keys generated successfully!');
+  const privatePath = path.join(outputPath, 'private.pem');
+  const publicPath = path.join(outputPath, 'public.pem');
+  
+  fs.writeFileSync(privatePath, privateKey);
+  fs.writeFileSync(publicPath, publicKey);
+  
+  console.log(`Keys generated successfully in ${outputPath}!`);
+  console.log(`Private key: ${privatePath}`);
+  console.log(`Public key: ${publicPath}`);
 }
 
 function signPlugin(pluginPath, privateKeyPath) {
+  if (!fs.existsSync(pluginPath)) {
+    throw new Error(`Plugin directory not found: ${pluginPath}`);
+  }
+  if (!fs.existsSync(privateKeyPath)) {
+    throw new Error(`Private key not found: ${privateKeyPath}`);
+  }
+
   const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
   const files = fs.readdirSync(pluginPath);
   const fileContents = {};
@@ -40,6 +60,10 @@ function signPlugin(pluginPath, privateKeyPath) {
       }
     }
   });
+
+  if (Object.keys(fileContents).length === 0) {
+    throw new Error(`No files found in plugin directory: ${pluginPath}`);
+  }
   
   const fileHashes = {};
   Object.entries(fileContents).forEach(([file, content]) => {
@@ -58,23 +82,76 @@ function signPlugin(pluginPath, privateKeyPath) {
     signature
   };
   
+  const signaturePath = path.join(pluginPath, 'signature.json');
   fs.writeFileSync(
-    path.join(pluginPath, 'signature.json'),
+    signaturePath,
     JSON.stringify(signatureData, null, 2)
   );
+  
   console.log('Plugin signed successfully!');
+  console.log(`Signature file created: ${signaturePath}`);
+}
+
+function verifyPlugin(pluginPath, publicKeyPath) {
+  if (!fs.existsSync(pluginPath)) {
+    throw new Error(`Plugin directory not found: ${pluginPath}`);
+  }
+  if (!fs.existsSync(publicKeyPath)) {
+    throw new Error(`Public key not found: ${publicKeyPath}`);
+  }
+
+  const publicKey = fs.readFileSync(publicKeyPath, 'utf8');
+  const signaturePath = path.join(pluginPath, 'signature.json');
+
+  if (!fs.existsSync(signaturePath)) {
+    throw new Error('Missing signature.json');
+  }
+
+  const signatureData = JSON.parse(fs.readFileSync(signaturePath));
+  const { fileHashes, signature, timestamp } = signatureData;
+
+  for (const [file, expectedHash] of Object.entries(fileHashes)) {
+    const filePath = path.join(pluginPath, file);
+    
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Missing file: ${file}`);
+    }
+    
+    const content = fs.readFileSync(filePath);
+    const actualHash = crypto.createHash('sha256')
+      .update(content)
+      .digest('hex');
+      
+    if (actualHash !== expectedHash) {
+      throw new Error(`File modified: ${file}`);
+    }
+  }
+  
+  const verify = crypto.createVerify('SHA256');
+  verify.write(JSON.stringify(fileHashes));
+  verify.end();
+  
+  const isValid = verify.verify(publicKey, signature, 'base64');
+  
+  if (!isValid) {
+    throw new Error('Invalid signature');
+  }
+
+  console.log('Plugin verification successful!');
+  console.log(`Signature timestamp: ${new Date(timestamp).toLocaleString()}`);
 }
 
 function showHelp() {
   console.log(`
 TREM Plugin Signer
 Usage:
-  npx trem-plugin-signer generate <output-path>  - Generate new key pair
-  npx trem-plugin-signer sign <plugin-path> <private-key-path>  - Sign a plugin
+  generate <output-path>             - Generate new key pair
+  sign <plugin-path> <private-key>   - Sign a plugin
+  verify <plugin-path> <public-key>  - Verify a plugin signature
+  help                              - Show this help
   `);
 }
 
-// 主程序
 try {
   switch (command) {
     case 'generate':
@@ -88,6 +165,15 @@ try {
       }
       signPlugin(args[1], args[2]);
       break;
+    case 'verify':
+      if (args.length < 3) {
+        console.error('Missing plugin path or public key path');
+        showHelp();
+        process.exit(1);
+      }
+      verifyPlugin(args[1], args[2]);
+      break;
+    case 'help':
     default:
       showHelp();
       break;
