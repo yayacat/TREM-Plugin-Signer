@@ -52,7 +52,7 @@ function signPlugin(pluginPath, privateKeyPath) {
   const fileContents = {};
   
   files.forEach(file => {
-    if (file !== 'signature.json') {
+    if (!file.startsWith('.') && file !== 'signature.json') {
       const filePath = path.join(pluginPath, file);
       if (fs.statSync(filePath).isFile()) {
         const content = fs.readFileSync(filePath);
