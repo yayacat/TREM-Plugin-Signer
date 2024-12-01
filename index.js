@@ -53,7 +53,7 @@ function getAllFiles(dir, baseDir = dir) {
       Object.assign(results, getAllFiles(filePath, baseDir));
     } else {
       const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
-      const content = fs.readFileSync(filePath);
+      const content = fs.readFileSync(filePath, 'utf8');
       results[relativePath] = content;
     }
   }
