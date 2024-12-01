@@ -39,6 +39,28 @@ function generateKeyPair(outputPath) {
   console.log(`Public key: ${publicPath}`);
 }
 
+function getAllFiles(dir, baseDir = dir) {
+  let results = {};
+  const list = fs.readdirSync(dir);
+
+  for (const file of list) {
+    if (file.startsWith('.') || file === 'signature.json') continue;
+
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+
+    if (stat.isDirectory()) {
+      Object.assign(results, getAllFiles(filePath, baseDir));
+    } else {
+      const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
+      const content = fs.readFileSync(filePath);
+      results[relativePath] = content;
+    }
+  }
+
+  return results;
+}
+
 function signPlugin(pluginPath, privateKeyPath) {
   if (!fs.existsSync(pluginPath)) {
     throw new Error(`Plugin directory not found: ${pluginPath}`);
@@ -48,18 +70,7 @@ function signPlugin(pluginPath, privateKeyPath) {
   }
 
   const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
-  const files = fs.readdirSync(pluginPath);
-  const fileContents = {};
-  
-  files.forEach(file => {
-    if (!file.startsWith('.') && file !== 'signature.json') {
-      const filePath = path.join(pluginPath, file);
-      if (fs.statSync(filePath).isFile()) {
-        const content = fs.readFileSync(filePath);
-        fileContents[file] = content;
-      }
-    }
-  });
+  const fileContents = getAllFiles(pluginPath);
 
   if (Object.keys(fileContents).length === 0) {
     throw new Error(`No files found in plugin directory: ${pluginPath}`);
@@ -90,6 +101,8 @@ function signPlugin(pluginPath, privateKeyPath) {
   
   console.log('Plugin signed successfully!');
   console.log(`Signature file created: ${signaturePath}`);
+  console.log('Files included in signature:');
+  Object.keys(fileHashes).forEach(file => console.log(`  ${file}`));
 }
 
 function verifyPlugin(pluginPath, publicKeyPath) {
