@@ -8,5 +8,8 @@
   },
   "scripts": {
     "start": "node index.js"
-  }
+  },
+  "keywords": ["trem", "plugin", "signature"],
+  "author": "",
+  "license": "MIT"
 }
