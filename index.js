@@ -134,7 +134,7 @@ function verifyPlugin(pluginPath, publicKeyPath) {
       throw new Error(`Missing file: ${file}`);
     }
     
-    const content = fs.readFileSync(filePath);
+    const content = normalizeContent(fs.readFileSync(filePath, 'utf8'));
     const actualHash = crypto.createHash('sha256')
       .update(content)
       .digest('hex');
