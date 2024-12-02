@@ -164,10 +164,10 @@ function showHelp() {
   console.log(`
 TREM Plugin Signer
 Usage:
-  generate <output-path>                          - Generate new key pair
-  sign <plugin-path> <private-key> (public-name)  - Sign a plugin
-  verify <plugin-path> <public-key>               - Verify a plugin signature
-  help                                            - Show this help
+  generate <output-path>                              - Generate new key pair
+  sign <plugin-path> <private-key> <public-key-name>  - Sign a plugin
+  verify <plugin-path> <public-key>                   - Verify a plugin signature
+  help                                                - Show this help
   `);
 }
 
