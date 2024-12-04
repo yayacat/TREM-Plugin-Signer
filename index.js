@@ -16,6 +16,13 @@ const colors = {
 
 const args = process.argv.slice(2);
 const command = args[0];
+const EXCLUDED_FILES = [
+  'LICENSE', 
+  'README.md', 
+  'package-lock.json', 
+  'package.json',
+  'signature.json'
+];
 
 function generateKeyPair(outputPath) {
   try {
@@ -58,7 +65,8 @@ function getAllFiles(dir, baseDir = dir) {
   const list = fs.readdirSync(dir);
 
   for (const file of list) {
-    if (file.startsWith('.') || file === 'signature.json') continue;
+    // 使用 EXCLUDED_FILES 來檢查
+    if (file.startsWith('.') || EXCLUDED_FILES.includes(file)) continue;
 
     const filePath = path.join(dir, file);
     const stat = fs.statSync(filePath);
