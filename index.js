@@ -23,6 +23,35 @@ const EXCLUDED_FILES = [
   'package.json',
   'signature.json'
 ];
+const EXCLUDED_EXTENSIONS = ['.trem'];
+
+function isExcluded(filename) {
+  return EXCLUDED_FILES.includes(filename) ||
+         EXCLUDED_EXTENSIONS.some(ext => filename.endsWith(ext)) ||
+         filename.startsWith('.');
+}
+
+function getAllFiles(dir, baseDir = dir) {
+  let results = {};
+  const list = fs.readdirSync(dir);
+
+  for (const file of list) {
+    if (isExcluded(file)) continue;
+
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+
+    if (stat.isDirectory()) {
+      Object.assign(results, getAllFiles(filePath, baseDir));
+    } else {
+      const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
+      const content = normalizeContent(fs.readFileSync(filePath, 'utf8'));
+      results[relativePath] = content;
+    }
+  }
+
+  return results;
+}
 
 function generateKeyPair(outputPath) {
   try {
@@ -58,29 +87,6 @@ function generateKeyPair(outputPath) {
 
 function normalizeContent(content) {
   return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-}
-
-function getAllFiles(dir, baseDir = dir) {
-  let results = {};
-  const list = fs.readdirSync(dir);
-
-  for (const file of list) {
-    // 使用 EXCLUDED_FILES 來檢查
-    if (file.startsWith('.') || EXCLUDED_FILES.includes(file)) continue;
-
-    const filePath = path.join(dir, file);
-    const stat = fs.statSync(filePath);
-
-    if (stat.isDirectory()) {
-      Object.assign(results, getAllFiles(filePath, baseDir));
-    } else {
-      const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
-      const content = normalizeContent(fs.readFileSync(filePath, 'utf8'));
-      results[relativePath] = content;
-    }
-  }
-
-  return results;
 }
 
 function signPlugin(pluginPath, privateKeyPath) {
