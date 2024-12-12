@@ -4,8 +4,54 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const SIGNER_VERSION = '1.0.0';
+
+const colors = {
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  reset: '\x1b[0m'
+};
+
 const args = process.argv.slice(2);
 const command = args[0];
+const EXCLUDED_FILES = [
+  'LICENSE',
+  'README.md',
+  'package-lock.json',
+  'package.json',
+  'signature.json'
+];
+const EXCLUDED_EXTENSIONS = ['.trem'];
+
+function isExcluded(filename) {
+  return EXCLUDED_FILES.includes(filename) ||
+         EXCLUDED_EXTENSIONS.some(ext => filename.endsWith(ext)) ||
+         filename.startsWith('.');
+}
+
+function getAllFiles(dir, baseDir = dir) {
+  let results = {};
+  const list = fs.readdirSync(dir);
+
+  for (const file of list) {
+    if (isExcluded(file)) continue;
+
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+
+    if (stat.isDirectory()) {
+      Object.assign(results, getAllFiles(filePath, baseDir));
+    } else {
+      const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
+      const content = normalizeContent(fs.readFileSync(filePath, 'utf8'));
+      results[relativePath] = content;
+    }
+  }
+
+  return results;
+}
 
 function generateKeyPair(outputPath) {
   try {
@@ -34,35 +80,13 @@ function generateKeyPair(outputPath) {
   fs.writeFileSync(privatePath, privateKey);
   fs.writeFileSync(publicPath, publicKey);
 
-  console.log(`Keys generated successfully in ${outputPath}!`);
-  console.log(`Private key: ${privatePath}`);
-  console.log(`Public key: ${publicPath}`);
+  console.log(colors.green + `Keys generated successfully in ${outputPath}!` + colors.reset);
+  console.log(colors.blue + `Private key: ${privatePath}` + colors.reset);
+  console.log(colors.blue + `Public key: ${publicPath}` + colors.reset);
 }
 
 function normalizeContent(content) {
   return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-}
-
-function getAllFiles(dir, baseDir = dir) {
-  let results = {};
-  const list = fs.readdirSync(dir);
-
-  for (const file of list) {
-    if (file.startsWith('.') || file === 'signature.json') continue;
-
-    const filePath = path.join(dir, file);
-    const stat = fs.statSync(filePath);
-
-    if (stat.isDirectory()) {
-      Object.assign(results, getAllFiles(filePath, baseDir));
-    } else {
-      const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
-      const content = normalizeContent(fs.readFileSync(filePath, 'utf8'));
-      results[relativePath] = content;
-    }
-  }
-
-  return results;
 }
 
 function signPlugin(pluginPath, privateKeyPath, keyId) {
@@ -72,6 +96,12 @@ function signPlugin(pluginPath, privateKeyPath, keyId) {
   if (!fs.existsSync(privateKeyPath)) {
     throw new Error(`Private key not found: ${privateKeyPath}`);
   }
+
+  const infoPath = path.join(pluginPath, 'info.json');
+  if (!fs.existsSync(infoPath)) {
+    throw new Error('Missing info.json');
+  }
+  const info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
 
   const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
   const fileContents = getAllFiles(pluginPath);
@@ -93,6 +123,7 @@ function signPlugin(pluginPath, privateKeyPath, keyId) {
 
   const signatureData = {
     timestamp: Date.now(),
+    version: info.version,
     fileHashes,
     signature
   };
@@ -106,10 +137,11 @@ function signPlugin(pluginPath, privateKeyPath, keyId) {
     JSON.stringify(signatureData, null, 2)
   );
 
-  console.log('Plugin signed successfully!');
-  console.log(`Signature file created: ${signaturePath}`);
-  console.log('Files included in signature:');
-  Object.keys(fileHashes).forEach(file => console.log(`  ${file}`));
+  console.log(colors.green + 'Plugin signed successfully!' + colors.reset);
+  console.log(colors.blue + `Signature file created: ${signaturePath}` + colors.reset);
+  console.log(colors.yellow + `Plugin version: ${info.version}` + colors.reset);
+  console.log(colors.yellow + 'Files included in signature:' + colors.reset);
+  Object.keys(fileHashes).forEach(file => console.log(colors.blue + `  ${file}` + colors.reset));
 }
 
 function verifyPlugin(pluginPath, publicKeyPath) {
@@ -128,7 +160,7 @@ function verifyPlugin(pluginPath, publicKeyPath) {
   }
 
   const signatureData = JSON.parse(fs.readFileSync(signaturePath));
-  const { fileHashes, signature, timestamp } = signatureData;
+  const { fileHashes, signature, timestamp, version } = signatureData;
 
   for (const [file, expectedHash] of Object.entries(fileHashes)) {
     const filePath = path.join(pluginPath, file);
@@ -156,13 +188,14 @@ function verifyPlugin(pluginPath, publicKeyPath) {
     throw new Error('Invalid signature');
   }
 
-  console.log('Plugin verification successful!');
-  console.log(`Signature timestamp: ${new Date(timestamp).toLocaleString()}`);
+  console.log(colors.green + 'Plugin verification successful!' + colors.reset);
+  console.log(colors.yellow + `Plugin version: ${version}` + colors.reset);
+  console.log(colors.blue + `Signature timestamp: ${new Date(timestamp).toLocaleString()}` + colors.reset);
 }
 
 function showHelp() {
-  console.log(`
-TREM Plugin Signer
+  console.log(colors.blue + `
+TREM Plugin Signer v${SIGNER_VERSION}
 Usage:
   generate <output-path>                              - Generate new key pair
   sign <plugin-path> <private-key> <public-key-name>  - Sign a plugin
@@ -178,7 +211,7 @@ try {
       break;
     case 'sign':
       if (args.length < 3) {
-        console.error('Missing plugin path or private key path');
+        console.error(colors.red + 'Missing plugin path or private key path' + colors.reset);
         showHelp();
         process.exit(1);
       }
@@ -186,7 +219,7 @@ try {
       break;
     case 'verify':
       if (args.length < 3) {
-        console.error('Missing plugin path or public key path');
+        console.error(colors.red + 'Missing plugin path or public key path' + colors.reset);
         showHelp();
         process.exit(1);
       }
@@ -198,6 +231,6 @@ try {
       break;
   }
 } catch (error) {
-  console.error('Error:', error.message);
+  console.error(colors.red + 'Error:', error.message + colors.reset);
   process.exit(1);
 }
