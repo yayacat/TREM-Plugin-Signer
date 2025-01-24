@@ -17,9 +17,9 @@ const colors = {
 const args = process.argv.slice(2);
 const command = args[0];
 const EXCLUDED_FILES = [
-  'LICENSE', 
-  'README.md', 
-  'package-lock.json', 
+  'LICENSE',
+  'README.md',
+  'package-lock.json',
   'package.json',
   'signature.json'
 ];
@@ -76,10 +76,10 @@ function generateKeyPair(outputPath) {
 
   const privatePath = path.join(outputPath, 'private.pem');
   const publicPath = path.join(outputPath, 'public.pem');
-  
+
   fs.writeFileSync(privatePath, privateKey);
   fs.writeFileSync(publicPath, publicKey);
-  
+
   console.log(colors.green + `Keys generated successfully in ${outputPath}!` + colors.reset);
   console.log(colors.blue + `Private key: ${privatePath}` + colors.reset);
   console.log(colors.blue + `Public key: ${publicPath}` + colors.reset);
@@ -89,7 +89,7 @@ function normalizeContent(content) {
   return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
-function signPlugin(pluginPath, privateKeyPath) {
+function signPlugin(pluginPath, privateKeyPath, keyId) {
   if (!fs.existsSync(pluginPath)) {
     throw new Error(`Plugin directory not found: ${pluginPath}`);
   }
@@ -109,31 +109,34 @@ function signPlugin(pluginPath, privateKeyPath) {
   if (Object.keys(fileContents).length === 0) {
     throw new Error(`No files found in plugin directory: ${pluginPath}`);
   }
-  
+
   const fileHashes = {};
   Object.entries(fileContents).forEach(([file, content]) => {
     const hash = crypto.createHash('sha256').update(content).digest('hex');
     fileHashes[file] = hash;
   });
-  
+
   const sign = crypto.createSign('SHA256');
   sign.write(JSON.stringify(fileHashes));
   sign.end();
   const signature = sign.sign(privateKey, 'base64');
-  
+
   const signatureData = {
     timestamp: Date.now(),
     version: info.version,
     fileHashes,
     signature
   };
-  
+  if (keyId != "") {
+    signatureData.keyId = keyId;
+  }
+
   const signaturePath = path.join(pluginPath, 'signature.json');
   fs.writeFileSync(
     signaturePath,
     JSON.stringify(signatureData, null, 2)
   );
-  
+
   console.log(colors.green + 'Plugin signed successfully!' + colors.reset);
   console.log(colors.blue + `Signature file created: ${signaturePath}` + colors.reset);
   console.log(colors.yellow + `Plugin version: ${info.version}` + colors.reset);
@@ -161,27 +164,26 @@ function verifyPlugin(pluginPath, publicKeyPath) {
 
   for (const [file, expectedHash] of Object.entries(fileHashes)) {
     const filePath = path.join(pluginPath, file);
-    
+
     if (!fs.existsSync(filePath)) {
       throw new Error(`Missing file: ${file}`);
     }
-    
     const content = normalizeContent(fs.readFileSync(filePath, 'utf8'));
     const actualHash = crypto.createHash('sha256')
       .update(content)
       .digest('hex');
-      
+
     if (actualHash !== expectedHash) {
       throw new Error(`File modified: ${file}`);
     }
   }
-  
+
   const verify = crypto.createVerify('SHA256');
   verify.write(JSON.stringify(fileHashes));
   verify.end();
-  
+
   const isValid = verify.verify(publicKey, signature, 'base64');
-  
+
   if (!isValid) {
     throw new Error('Invalid signature');
   }
@@ -195,11 +197,11 @@ function showHelp() {
   console.log(colors.blue + `
 TREM Plugin Signer v${SIGNER_VERSION}
 Usage:
-  generate <output-path>             - Generate new key pair
-  sign <plugin-path> <private-key>   - Sign a plugin
-  verify <plugin-path> <public-key>  - Verify a plugin signature
-  help                              - Show this help
-  ` + colors.reset);
+  generate <output-path>                              - Generate new key pair
+  sign <plugin-path> <private-key> <public-key-name>  - Sign a plugin
+  verify <plugin-path> <public-key>                   - Verify a plugin signature
+  help                                                - Show this help
+  `);
 }
 
 try {
@@ -213,7 +215,7 @@ try {
         showHelp();
         process.exit(1);
       }
-      signPlugin(args[1], args[2]);
+      signPlugin(args[1], args[2], args[3] || '');
       break;
     case 'verify':
       if (args.length < 3) {
