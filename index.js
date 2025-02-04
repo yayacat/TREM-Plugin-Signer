@@ -25,7 +25,13 @@ const EXCLUDED_FILES = [
 ];
 const EXCLUDED_EXTENSIONS = ['.trem'];
 
-function isExcluded(filename) {
+function isExcluded(filename, dir) {
+  const isInNodeModules = dir.includes('node_modules');
+
+  if (isInNodeModules) {
+    return false;
+  }
+
   return EXCLUDED_FILES.includes(filename)
     || EXCLUDED_EXTENSIONS.some((ext) => filename.endsWith(ext))
     || filename.startsWith('.');
@@ -36,7 +42,7 @@ function getAllFiles(dir, baseDir = dir) {
   const list = fs.readdirSync(dir);
 
   for (const file of list) {
-    if (isExcluded(file)) {
+    if (isExcluded(file, dir)) {
       continue;
     }
 
